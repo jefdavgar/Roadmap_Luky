@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruta de Desarrollo: Plataforma Luky</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8FAFC;
+            color: #1E293B;
+        }
+        
+        /* Progress Bar Animation */
+        .progress-bar-fill {
+            transition: width 0.5s ease-out;
+        }
+
+        /* Timeline Connector Line */
+        .timeline-line {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 100%;
+            background-color: #E2E8F0;
+            z-index: 0;
+        }
+
+        /* Node Styling */
+        .timeline-node {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 10;
+        }
+        
+        .timeline-node:hover {
+            transform: scale(1.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .timeline-node.completed {
+            background-color: #2563EB; /* Primary Blue */
+            border-color: #2563EB;
+            color: white;
+        }
+
+        /* Card Styling */
+        .milestone-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .milestone-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            border-color: #93C5FD;
+        }
+
+        .milestone-card.completed {
+            border-left-color: #2563EB;
+            background-color: #F8FAFC;
+        }
+        
+        .milestone-card.completed h3 {
+            text-decoration: line-through;
+            color: #64748B;
+            opacity: 0.7;
+        }
+
+        /* Edit Button on Card (Visible on hover) */
+        .milestone-card .edit-btn {
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .milestone-card:hover .edit-btn {
+            opacity: 1;
+        }
+
+        /* Modal Animation */
+        .modal-enter { opacity: 0; transform: scale(0.95); }
+        .modal-enter-active { opacity: 1; transform: scale(1); transition: all 0.2s ease-out; }
+        .modal-exit { opacity: 1; transform: scale(1); }
+        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in; }
+
+        /* Custom Scrollbar for Modal */
+        #detailModalContent, #editModalContent, #dashboardModalContent {
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #detailModalScrollArea, #editModalScrollArea, #dashboardScrollArea {
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="pb-20">
+
+    <!-- Top Sticky Header with Progress -->
+    <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md shadow-sm border-b border-gray-200">
+        <div class="max-w-4xl mx-auto px-4 py-4">
+            <div class="flex justify-between items-center mb-2">
+                <div>
+                    <h1 class="text-xl font-bold text-gray-900">Gestor de Roadmap Luky</h1>
+                    <div class="flex gap-4 items-center text-xs text-gray-500">
+                        <span class="hidden sm:block">Base de Datos Local (JSON)</span>
+                        <button onclick="resetData()" class="text-red-400 hover:text-red-600 underline">Restaurar Default</button>
+                        <button onclick="openDashboardModal()" class="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-semibold transition">
+                            <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Ver Dashboard
+                        </button>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <span id="progressText" class="text-2xl font-bold text-blue-600">0%</span>
+                    <span class="text-xs text-gray-500 block">Completado Total</span>
+                </div>
+            </div>
+            <!-- Progress Bar Container -->
+            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div id="progressBar" class="bg-blue-600 h-3 rounded-full progress-bar-fill" style="width: 0%"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content: Vertical Timeline -->
+    <main class="max-w-4xl mx-auto px-4 py-12 relative">
+        <div class="timeline-line hidden md:block"></div>
+        <div id="timelineContainer" class="space-y-12">
+            <!-- Timeline injected by JS -->
+        </div>
+    </main>
+
+    <!-- VIEW DETAILS MODAL -->
+    <div id="detailModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all duration-300 scale-95" id="detailModalContent">
+            
+            <div class="relative bg-blue-600 p-6 text-white flex-shrink-0">
+                <button onclick="closeModal('detailModal')" class="absolute top-4 right-4 text-white/80 hover:text-white rounded-full p-1 transition">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+                <div class="flex items-center gap-3 mb-2">
+                    <span id="modalPhaseBadge" class="px-2 py-1 bg-white/20 rounded text-xs font-semibold uppercase tracking-wider">Fase</span>
+                    <span class="flex items-center text-xs bg-black/20 px-2 py-1 rounded">
+                        <i data-lucide="clock" class="w-3 h-3 mr-1"></i>
+                        <span id="modalTime">Time</span>
+                    </span>
+                    <span id="modalDeveloper" class="flex items-center text-xs bg-black/20 px-2 py-1 rounded">
+                        <i data-lucide="user" class="w-3 h-3 mr-1"></i>
+                        <span id="modalDeveloperName">Desarrollador</span>
+                    </span>
+                </div>
+                <h2 id="modalTitle" class="text-2xl font-bold leading-tight">Título</h2>
+            </div>
+
+            <div id="detailModalScrollArea" class="p-6">
+                <div class="mb-6">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Descripción</h4>
+                    <p id="modalDescription" class="text-gray-700 leading-relaxed text-sm"></p>
+                </div>
+
+                <div id="checklistContainer" class="mb-6 hidden">
+                    <h4 class="text-sm font-bold text-gray-900 mb-3 flex items-center">
+                        <i data-lucide="list-todo" class="w-4 h-4 mr-2 text-blue-500"></i>
+                        Checklist
+                    </h4>
+                    <div id="checklistItems" class="space-y-2"></div>
+                </div>
+                
+                <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6">
+                    <h4 class="text-xs font-bold text-gray-900 mb-2 flex items-center uppercase tracking-wider">
+                        <i data-lucide="target" class="w-4 h-4 mr-2 text-blue-500"></i>
+                        Objetivo
+                    </h4>
+                    <p id="modalGoal" class="text-sm text-gray-600"></p>
+                </div>
+
+                <button id="modalActionBtn" class="w-full py-3 px-4 rounded-xl font-bold text-white transition-all shadow-lg flex items-center justify-center gap-2 mt-auto"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT / CREATE MODAL -->
+    <div id="editModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all duration-300 scale-95" id="editModalContent">
+            
+            <div class="bg-gray-800 p-4 text-white flex justify-between items-center">
+                <h2 id="editModalTitle" class="text-lg font-bold">Editar Hito</h2>
+                <button onclick="closeModal('editModal')" class="text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <div id="editModalScrollArea" class="p-6 space-y-4">
+                <input type="hidden" id="editPhaseId">
+                <input type="hidden" id="editMilestoneId">
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Título</label>
+                    <input type="text" id="editInputTitle" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+
+                <!-- Fila de Icono, Tiempo Estimado y Desarrollador -->
+                <div class="grid grid-cols-3 gap-4">
+                    <!-- Icono (Dropdown corregido) -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Icono (Lucide)</label>
+                        <div class="relative flex items-center">
+                            <!-- Se usa pl-10 para dejar espacio al icono de preview -->
+                            <select id="editInputIcon" 
+                                    onchange="updateIconPreview(this.value)"
+                                    class="w-full border border-gray-300 rounded-lg py-2 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none bg-white appearance-none text-sm">
+                                <!-- Options populated by JS -->
+                            </select>
+                            <div class="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-500">
+                                <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                            </div>
+                            <!-- Icon Preview next to the field -->
+                            <span id="iconPreview" class="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-600 pointer-events-none">
+                                <i data-lucide="star" class="w-4 h-4"></i>
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tiempo Est.</label>
+                        <input type="text" id="editInputTime" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Desarrollador</label>
+                        <select id="editInputDeveloper" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white"></select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Descripción</label>
+                    <textarea id="editInputDesc" rows="3" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Objetivo</label>
+                    <textarea id="editInputGoal" rows="2" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                </div>
+
+                <!-- Checklist Manager -->
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Items del Checklist</label>
+                    <div id="editChecklistContainer" class="space-y-2 mb-2">
+                        <!-- Dynamic Inputs -->
+                    </div>
+                    <button onclick="addChecklistInput()" class="text-xs text-blue-600 font-bold flex items-center hover:underline">
+                        <i data-lucide="plus" class="w-3 h-3 mr-1"></i> Agregar Item
+                    </button>
+                </div>
+
+                <div class="flex gap-3 pt-4 border-t border-gray-100">
+                    <button onclick="deleteMilestone()" id="btnDelete" class="px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg font-medium transition">Eliminar</button>
+                    <div class="flex-grow"></div>
+                    <button onclick="closeModal('editModal')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition">Cancelar</button>
+                    <button onclick="saveMilestone()" class="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow transition">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DASHBOARD MODAL -->
+    <div id="dashboardModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all duration-300 scale-95" id="dashboardModalContent">
+            
+            <div class="relative bg-gray-800 p-4 text-white flex-shrink-0 flex justify-between items-center">
+                <h2 class="text-xl font-bold">Dashboard de Eficiencia de Desarrolladores</h2>
+                <button onclick="closeModal('dashboardModal')" class="text-gray-400 hover:text-white rounded-full p-1 transition">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+
+            <div id="dashboardScrollArea" class="p-6">
+                <p class="text-sm text-gray-600 mb-6">Métricas de progreso basadas en la asignación de hitos y la completitud del checklist.</p>
+                <div id="developerMetricsContainer" class="space-y-6">
+                    <!-- Metrics injected by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS ---
+        const DEVELOPERS = [
+            "Desarrollador Carlos",
+            "Desarrollador Jeferson",
+            "Desarrollador Sebastian"
+        ];
+
+        // Lista de iconos de Lucide disponibles para el selector
+        const AVAILABLE_ICONS = [
+            "star", "database", "brain-circuit", "shield-check", "palette", "layout-dashboard", 
+            "graduation-cap", "link", "refresh-cw", "message-circle", "pen-tool", "banknote",
+            "box", "zap", "activity", "alert-triangle", "anchor", "settings", "code", "file-text", 
+            "server", "send"
+        ];
+        
+        // --- DATA SEED (The "Database" Structure) ---
+        const DEFAULT_DB = [
+            {
+                id: 1,
+                title: "Fase 1: Verificación y Riesgo",
+                deadline: "10 de Diciembre",
+                milestones: [
+                    {
+                        id: "m1_1",
+                        title: "Automatización DataCrédito",
+                        time: "5-7 días",
+                        description: "Completar la automatización de las consultas a DataCrédito para eliminar el mock.",
+                        goal: "Hacer que el preaprobado sea totalmente funcional con datos reales.",
+                        icon: "database",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: [
+                            { text: "En el flujo del tracking de la solicitud de crédito debe hacer la consulta en automático.", isChecked: false },
+                            { text: "Botón para consulta manual en card de codeudor.", isChecked: false },
+                            { text: "Validar reciclaje de datos (cache) si la consulta tiene menos de 1 año.", isChecked: false }
+                        ]
+                    },
+                    {
+                        id: "m1_2",
+                        title: "Integración ML en Core",
+                        time: "4-6 días",
+                        description: "Integrar la lógica de machine learning en el backend para decisiones dinámicas.",
+                        goal: "Decisiones de riesgo tomadas de manera dinámica en tiempo real.",
+                        icon: "brain-circuit",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    },
+                    {
+                        id: "m1_3",
+                        title: "Pruebas de QA (Riesgo)",
+                        time: "3-4 días",
+                        description: "Ejecución de baterías de pruebas para asegurar el modelo de decisión.",
+                        goal: "Asegurar estabilidad del motor de decisión.",
+                        icon: "shield-check",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    }
+                ]
+            },
+            {
+                id: 2,
+                title: "Fase 2: Onboarding del Asesor",
+                deadline: "20 de Diciembre",
+                milestones: [
+                    {
+                        id: "m2_1",
+                        title: "Adaptación de Marca Luky",
+                        time: "3-5 días",
+                        description: "Actualización de activos visuales y entorno Google Workspace.",
+                        goal: "Identidad de marca consistente.",
+                        icon: "palette",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    },
+                    {
+                        id: "m2_2",
+                        title: "Dashboard del Asesor",
+                        time: "5-7 días",
+                        description: "Panel de control para gestionar solicitudes y ver estados.",
+                        goal: "Centralizar la gestión operativa.",
+                        icon: "layout-dashboard",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    },
+                    {
+                        id: "m2_3",
+                        title: "Capacitación y Checklist",
+                        time: "2-3 días",
+                        description: "Manuales y checklist de operación diaria.",
+                        goal: "Garantizar adopción del sistema.",
+                        icon: "graduation-cap",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    }
+                ]
+            },
+            {
+                id: 3,
+                title: "Fase 3: Cliente WhatsApp",
+                deadline: "29 de Diciembre",
+                milestones: [
+                    {
+                        id: "m3_1",
+                        title: "Deep Links WhatsApp",
+                        time: "4-6 días",
+                        description: "Enlaces directos para iniciar flujos específicos.",
+                        goal: "Reducir fricción del cliente.",
+                        icon: "link",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    },
+                    {
+                        id: "m3_2",
+                        title: "Configuración Callbacks",
+                        time: "3-5 días",
+                        description: "Actualización automática de estados en Dashboard.",
+                        goal: "Sincronización perfecta.",
+                        icon: "refresh-cw",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    },
+                    {
+                        id: "m3_3",
+                        title: "Pruebas UX WhatsApp",
+                        time: "3-4 días",
+                        description: "Pruebas con usuarios reales.",
+                        goal: "Experiencia pulida.",
+                        icon: "message-circle",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    }
+                ]
+            },
+            {
+                id: 4,
+                title: "Fase 4: Cierre y Desembolso",
+                deadline: "5 de Enero",
+                milestones: [
+                    {
+                        id: "m4_1",
+                        title: "Firma Digital",
+                        time: "3-4 días",
+                        description: "Integración firma electrónica para pagarés.",
+                        goal: "Legalización 100% digital.",
+                        icon: "pen-tool",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    },
+                    {
+                        id: "m4_2",
+                        title: "Flujo de Desembolso",
+                        time: "3-5 días",
+                        description: "Configuración final del flujo operativo con tesorería.",
+                        goal: "Cerrar el ciclo del proceso.",
+                        icon: "banknote",
+                        isCompleted: false,
+                        developer: "Desarrollador Jeferson",
+                        checklist: []
+                    }
+                ]
+            }
+        ];
+
+        // --- DATABASE ENGINE (JSON + LocalStorage) ---
+        const DB_KEY = 'luky_roadmap_db_v4';
+        let db = []; // In-memory database
+
+        function loadDB() {
+            const stored = localStorage.getItem(DB_KEY);
+            if (stored) {
+                db = JSON.parse(stored);
+                // Sanity check: ensure all milestones have a developer field
+                db.forEach(phase => {
+                    phase.milestones.forEach(m => {
+                        if (typeof m.developer === 'undefined') {
+                            m.developer = "Desarrollador Jeferson";
+                        }
+                    });
+                });
+                saveDB(); // Save updated structure
+            } else {
+                db = JSON.parse(JSON.stringify(DEFAULT_DB)); // Deep copy
+                saveDB();
+            }
+        }
+
+        function saveDB() {
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+            renderTimeline();
+            updateProgress();
+        }
+
+        function resetData() {
+            // Using confirm as a placeholder for a custom modal
+            if(confirm("¿Seguro que quieres reiniciar todos los datos a la configuración inicial?")) { 
+                localStorage.removeItem(DB_KEY);
+                location.reload();
+            }
+        }
+
+        // --- CRUD OPERATIONS ---
+
+        // UPDATE STATUS (Main Milestone)
+        function toggleMilestoneStatus(phaseId, milestoneId) {
+            const phase = db.find(p => p.id === phaseId);
+            const milestone = phase.milestones.find(m => m.id === milestoneId);
+            milestone.isCompleted = !milestone.isCompleted;
+            saveDB();
+            // If modal open, update button
+            const btn = document.getElementById('modalActionBtn');
+            if (btn) updateViewModalButton(milestone);
+        }
+
+        // UPDATE CHECKLIST
+        function toggleChecklistItem(phaseId, milestoneId, checkIndex) {
+            const phase = db.find(p => p.id === phaseId);
+            const milestone = phase.milestones.find(m => m.id === milestoneId);
+            milestone.checklist[checkIndex].isChecked = !milestone.checklist[checkIndex].isChecked;
+            saveDB();
+            
+            // Re-render checklist in view modal
+            const container = document.getElementById('checklistItems');
+            if(container) renderChecklistView(milestone, container, phaseId);
+        }
+
+        // Updates the icon preview next to the select field
+        function updateIconPreview(iconKey) {
+            const preview = document.getElementById('iconPreview');
+            if (preview) {
+                preview.innerHTML = `<i data-lucide="${iconKey}" class="w-4 h-4"></i>`;
+                lucide.createIcons();
+            }
+        }
+
+
+        // CREATE / EDIT MILESTONE
+        function openEditModal(phaseId, milestoneId = null) {
+            const modal = document.getElementById('editModal');
+            const content = document.getElementById('editModalContent');
+            const developerSelect = document.getElementById('editInputDeveloper');
+            const iconSelect = document.getElementById('editInputIcon');
+            
+            // Clear Inputs
+            document.getElementById('editChecklistContainer').innerHTML = '';
+            
+            document.getElementById('editPhaseId').value = phaseId;
+            document.getElementById('editMilestoneId').value = milestoneId || 'NEW';
+
+            // 1. Populate Developer Dropdown
+            developerSelect.innerHTML = DEVELOPERS.map(dev => `<option value="${dev}">${dev}</option>`).join('');
+
+            // 2. Populate Icon Dropdown
+            iconSelect.innerHTML = AVAILABLE_ICONS.map(icon => 
+                `<option value="${icon}">${icon}</option>`
+            ).join('');
+
+
+            if (milestoneId) {
+                // EDIT MODE
+                const phase = db.find(p => p.id === phaseId);
+                const m = phase.milestones.find(m => m.id === milestoneId);
+                
+                document.getElementById('editModalTitle').innerText = "Editar Hito";
+                document.getElementById('editInputTitle').value = m.title;
+                document.getElementById('editInputTime').value = m.time;
+                // iconSelect.value = m.icon; // Set selected icon
+                document.getElementById('editInputDesc').value = m.description;
+                document.getElementById('editInputGoal').value = m.goal;
+                developerSelect.value = m.developer || DEVELOPERS[0]; // Set selected developer
+                document.getElementById('btnDelete').classList.remove('hidden');
+
+                // Load Checklist Inputs
+                m.checklist.forEach(item => addChecklistInput(item.text));
+
+                // 3. Set selected icon and update preview
+                iconSelect.value = m.icon;
+
+            } else {
+                // CREATE MODE
+                document.getElementById('editModalTitle').innerText = "Nuevo Hito";
+                document.getElementById('editInputTitle').value = "";
+                document.getElementById('editInputTime').value = "1-2 días";
+                document.getElementById('editInputDesc').value = "";
+                document.getElementById('editInputGoal').value = "";
+                developerSelect.value = DEVELOPERS[1]; // Default to Jeferson for new
+                document.getElementById('btnDelete').classList.add('hidden');
+
+                // 4. Default icon for new milestone
+                iconSelect.value = "star";
+            }
+
+            // 5. Update preview with the final selected icon
+            updateIconPreview(iconSelect.value);
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function addChecklistInput(value = "") {
+            const container = document.getElementById('editChecklistContainer');
+            const div = document.createElement('div');
+            div.className = "flex gap-2 items-center";
+            div.innerHTML = `
+                <i data-lucide="check-square" class="w-4 h-4 text-gray-400"></i>
+                <input type="text" value="${value}" class="checklist-input flex-grow border border-gray-300 rounded p-1 text-sm focus:border-blue-500 outline-none" placeholder="Tarea...">
+                <button onclick="this.parentElement.remove()" class="text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            `;
+            container.appendChild(div);
+            lucide.createIcons();
+        }
+
+        function saveMilestone() {
+            const phaseId = parseInt(document.getElementById('editPhaseId').value);
+            const milestoneId = document.getElementById('editMilestoneId').value;
+            
+            const title = document.getElementById('editInputTitle').value;
+            if (!title) return alert("El título es obligatorio"); // Usando alert como placeholder para un modal custom
+
+            // Collect Checklist
+            const checklistInputs = document.querySelectorAll('.checklist-input');
+            const newChecklist = Array.from(checklistInputs).map(input => ({
+                text: input.value,
+                isChecked: false 
+            })).filter(i => i.text.trim() !== "");
+
+            // Preserve checked state if text matches old items (Basic diff)
+            if (milestoneId !== 'NEW') {
+                const phase = db.find(p => p.id === phaseId);
+                const oldM = phase.milestones.find(m => m.id === milestoneId);
+                newChecklist.forEach(newKey => {
+                    const match = oldM.checklist.find(oldKey => oldKey.text === newKey.text);
+                    if (match) newKey.isChecked = match.isChecked;
+                });
+            }
+
+            const milestoneData = {
+                title: document.getElementById('editInputTitle').value,
+                time: document.getElementById('editInputTime').value,
+                icon: document.getElementById('editInputIcon').value, // READS FROM SELECT
+                developer: document.getElementById('editInputDeveloper').value,
+                description: document.getElementById('editInputDesc').value,
+                goal: document.getElementById('editInputGoal').value,
+                checklist: newChecklist
+            };
+
+            const phase = db.find(p => p.id === phaseId);
+
+            if (milestoneId === 'NEW') {
+                // Create
+                const newId = `m${phaseId}_${Date.now()}`;
+                phase.milestones.push({
+                    id: newId,
+                    ...milestoneData,
+                    isCompleted: false
+                });
+            } else {
+                // Update
+                const mIndex = phase.milestones.findIndex(m => m.id === milestoneId);
+                phase.milestones[mIndex] = {
+                    ...phase.milestones[mIndex],
+                    ...milestoneData,
+                    checklist: newChecklist // Replace checklist
+                };
+            }
+
+            saveDB();
+            closeModal('editModal');
+            closeModal('detailModal');
+        }
+
+        function deleteMilestone() {
+            // Using custom modal since alert is forbidden
+            const modalMessage = "Esta acción eliminará el hito de forma permanente. ¿Estás seguro de que quieres continuar?";
+            if (confirm(modalMessage)) { // Usando confirm como un placeholder para un modal custom
+                const phaseId = parseInt(document.getElementById('editPhaseId').value);
+                const milestoneId = document.getElementById('editMilestoneId').value;
+                
+                const phase = db.find(p => p.id === phaseId);
+                phase.milestones = phase.milestones.filter(m => m.id !== milestoneId);
+                
+                saveDB();
+                closeModal('editModal');
+                closeModal('detailModal');
+            }
+        }
+
+        // --- RENDER LOGIC ---
+
+        function renderTimeline() {
+            const container = document.getElementById('timelineContainer');
+            container.innerHTML = '';
+
+            db.forEach((phase, index) => {
+                // Phase Header
+                const phaseDiv = document.createElement('div');
+                phaseDiv.className = "relative z-10 mb-8 text-center group/phase";
+                phaseDiv.innerHTML = `
+                    <div class="inline-flex items-center bg-white border border-gray-200 rounded-full px-6 py-2 shadow-sm mb-4 gap-3">
+                        <div>
+                            <span class="font-bold text-gray-800">${phase.title}</span>
+                            <span class="text-xs text-gray-500 ml-2">Limite: ${phase.deadline}</span>
+                        </div>
+                        <button onclick="openEditModal(${phase.id})" class="bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 rounded-full p-1 transition" title="Agregar Hito">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(phaseDiv);
+
+                phase.milestones.forEach((m, mIndex) => {
+                    const isLeft = mIndex % 2 === 0;
+                    
+                    const item = document.createElement('div');
+                    item.className = `flex flex-col md:flex-row items-center justify-between relative mb-12 w-full`;
+                    
+                    const cardHtml = `
+                        <div class="w-full md:w-5/12 ${isLeft ? 'md:text-right' : 'md:order-last md:text-left'} order-last mt-4 md:mt-0 relative group">
+                            <button onclick="openEditModal(${phase.id}, '${m.id}')" class="edit-btn absolute top-2 ${isLeft ? 'left-2' : 'right-2'} z-20 bg-white shadow p-1.5 rounded-md text-gray-400 hover:text-blue-600 border border-gray-100" title="Editar Contenido">
+                                <i data-lucide="pencil" class="w-3 h-3"></i>
+                            </button>
+
+                            <div onclick="openDetailModal(${phase.id}, '${m.id}')" 
+                                 class="milestone-card bg-white p-6 rounded-2xl shadow-sm border-l-4 ${m.isCompleted ? 'completed border-blue-500' : 'border-gray-300 hover:border-blue-400'}">
+                                <div class="flex items-center ${isLeft ? 'md:justify-end' : ''} gap-2 mb-2">
+                                    <span class="text-xs font-semibold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded-md">${m.time}</span>
+                                    ${m.isCompleted ? '<span class="text-green-500 text-xs font-bold flex items-center"><i data-lucide="check" class="w-3 h-3 mr-1"></i> Listo</span>' : ''}
+                                </div>
+                                <h3 class="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition-colors">${m.title}</h3>
+                                <p class="text-sm text-gray-500 mt-1 line-clamp-2">${m.description}</p>
+                                
+                                <div class="flex items-center gap-2 mt-3 text-xs font-medium ${isLeft ? 'md:justify-end' : ''}">
+                                    <span class="flex items-center text-gray-600">
+                                        <i data-lucide="user" class="w-3 h-3 mr-1 text-gray-400"></i>
+                                        ${m.developer}
+                                    </span>
+                                    ${m.checklist.length > 0 ? `<span class="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded flex items-center"><i data-lucide="list-todo" class="w-3 h-3 mr-1"></i> ${m.checklist.filter(c => c.isChecked).length}/${m.checklist.length}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    const nodeHtml = `
+                        <div class="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center hidden md:flex">
+                            <button onclick="toggleMilestoneStatus(${phase.id}, '${m.id}')" 
+                                    class="timeline-node w-12 h-12 rounded-full border-4 flex items-center justify-center bg-white 
+                                    ${m.isCompleted ? 'completed' : 'border-gray-200 text-gray-400 hover:border-blue-300'}">
+                                <i data-lucide="${m.isCompleted ? 'check' : m.icon}" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                        <div class="md:hidden w-full flex justify-center mb-2">
+                             <button onclick="toggleMilestoneStatus(${phase.id}, '${m.id}')" 
+                                    class="w-10 h-10 rounded-full border-2 flex items-center justify-center 
+                                    ${m.isCompleted ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-200 text-gray-400'}">
+                                <i data-lucide="${m.isCompleted ? 'check' : m.icon}" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    `;
+
+                    const spacerHtml = `<div class="w-full md:w-5/12 hidden md:block"></div>`;
+
+                    item.innerHTML = isLeft ? `${cardHtml}${nodeHtml}${spacerHtml}` : `${spacerHtml}${nodeHtml}${cardHtml}`;
+                    container.appendChild(item);
+                });
+            });
+            lucide.createIcons();
+        }
+
+        function updateProgress() {
+            let total = 0;
+            let completed = 0;
+            db.forEach(p => p.milestones.forEach(m => {
+                total++;
+                if (m.isCompleted) completed++;
+            }));
+            const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
+            document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressText').innerText = `${percent}%`;
+        }
+
+        // --- VIEW DETAIL MODAL LOGIC ---
+
+        function openDetailModal(phaseId, milestoneId) {
+            const phase = db.find(p => p.id === phaseId);
+            const m = phase.milestones.find(m => m.id === milestoneId);
+            
+            document.getElementById('modalTitle').innerText = m.title;
+            document.getElementById('modalPhaseBadge').innerText = phase.title;
+            document.getElementById('modalTime').innerText = m.time;
+            document.getElementById('modalDeveloperName').innerText = m.developer;
+            document.getElementById('modalDescription').innerText = m.description;
+            document.getElementById('modalGoal').innerText = m.goal;
+
+            // Render Checklist
+            const container = document.getElementById('checklistItems');
+            const wrapper = document.getElementById('checklistContainer');
+            if (m.checklist && m.checklist.length > 0) {
+                wrapper.classList.remove('hidden');
+                renderChecklistView(m, container, phaseId);
+            } else {
+                wrapper.classList.add('hidden');
+            }
+
+            updateViewModalButton(m, phaseId);
+
+            const modal = document.getElementById('detailModal');
+            const content = document.getElementById('detailModalContent'); 
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function renderChecklistView(milestone, container, phaseId) {
+            container.innerHTML = '';
+            milestone.checklist.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = "flex items-start p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors";
+                div.onclick = () => toggleChecklistItem(phaseId, milestone.id, idx);
+                div.innerHTML = `
+                    <div class="mt-0.5 flex-shrink-0 w-5 h-5 border rounded flex items-center justify-center transition-all ${item.isChecked ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'}">
+                        ${item.isChecked ? '<i data-lucide="check" class="w-3 h-3 text-white"></i>' : ''}
+                    </div>
+                    <p class="ml-3 text-sm leading-snug select-none ${item.isChecked ? 'line-through text-gray-400' : 'text-gray-700'}">${item.text}</p>
+                `;
+                container.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        function updateViewModalButton(milestone, phaseId) {
+            const btn = document.getElementById('modalActionBtn');
+            const pId = db.find(p => p.milestones.some(mi => mi.id === milestone.id)).id;
+
+            if (milestone.isCompleted) {
+                btn.className = "w-full py-3 px-4 rounded-xl font-bold bg-white border-2 border-gray-200 text-gray-500 hover:bg-gray-50 transition-all flex items-center justify-center gap-2 mt-auto";
+                btn.innerHTML = `<i data-lucide="rotate-ccw" class="w-5 h-5"></i> Marcar como Pendiente`;
+            } else {
+                btn.className = "w-full py-3 px-4 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 mt-auto";
+                btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5"></i> Completar Hito Principal`;
+            }
+            btn.onclick = () => {
+                toggleMilestoneStatus(pId, milestone.id);
+                const updatedM = db.find(p => p.id === pId).milestones.find(m => m.id === milestone.id);
+                updateViewModalButton(updatedM, pId);
+            };
+            lucide.createIcons();
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            const content = document.getElementById(`${id}Content`); 
+            
+            if (!modal || !content) {
+                console.error(`Error en closeModal: No se encontró el modal o el contenido con los IDs: ${id} y ${id}Content`);
+                return;
+            }
+
+            modal.classList.add('opacity-0');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        // --- DASHBOARD LOGIC ---
+
+        function calculateDeveloperMetrics() {
+            const metrics = {};
+            DEVELOPERS.forEach(dev => {
+                metrics[dev] = {
+                    totalMilestones: 0,
+                    completedMilestones: 0,
+                    totalChecklistItems: 0,
+                    completedChecklistItems: 0,
+                };
+            });
+
+            db.forEach(phase => {
+                phase.milestones.forEach(m => {
+                    const dev = m.developer || DEVELOPERS[0]; // Default to first developer if undefined
+                    if (metrics[dev]) {
+                        metrics[dev].totalMilestones++;
+                        if (m.isCompleted) {
+                            metrics[dev].completedMilestones++;
+                        }
+                        
+                        m.checklist.forEach(item => {
+                            metrics[dev].totalChecklistItems++;
+                            if (item.isChecked) {
+                                metrics[dev].completedChecklistItems++;
+                            }
+                        });
+                    }
+                });
+            });
+
+            return metrics;
+        }
+
+        function openDashboardModal() {
+            const metrics = calculateDeveloperMetrics();
+            const container = document.getElementById('developerMetricsContainer');
+            container.innerHTML = '';
+
+            DEVELOPERS.forEach(dev => {
+                const m = metrics[dev];
+                if (!m) return;
+
+                const milestoneProgress = m.totalMilestones > 0 ? Math.round((m.completedMilestones / m.totalMilestones) * 100) : 0;
+                const checklistProgress = m.totalChecklistItems > 0 ? Math.round((m.completedChecklistItems / m.totalChecklistItems) * 100) : 0;
+                
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-xl shadow-lg border border-gray-100";
+                card.innerHTML = `
+                    <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4">
+                        <i data-lucide="user-check" class="w-6 h-6 text-blue-600"></i>
+                        ${dev}
+                    </h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- Metric 1: Milestone Progress -->
+                        <div class="bg-blue-50 p-3 rounded-lg">
+                            <p class="text-xs font-semibold text-blue-600 uppercase">Hitos Completados</p>
+                            <div class="text-2xl font-bold text-gray-800 mt-1">${milestoneProgress}%</div>
+                            <p class="text-xs text-gray-500">${m.completedMilestones} de ${m.totalMilestones} Hitos</p>
+                            <div class="w-full bg-blue-200 rounded-full h-1.5 mt-2">
+                                <div class="bg-blue-600 h-1.5 rounded-full" style="width: ${milestoneProgress}%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Metric 2: Checklist Progress -->
+                        <div class="bg-green-50 p-3 rounded-lg">
+                            <p class="text-xs font-semibold text-green-600 uppercase">Checklist Completado</p>
+                            <div class="text-2xl font-bold text-gray-800 mt-1">${checklistProgress}%</div>
+                            <p class="text-xs text-gray-500">${m.completedChecklistItems} de ${m.totalChecklistItems} Tareas</p>
+                            <div class="w-full bg-green-200 rounded-full h-1.5 mt-2">
+                                <div class="bg-green-600 h-1.5 rounded-full" style="width: ${checklistProgress}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            
+            lucide.createIcons();
+
+            const modal = document.getElementById('dashboardModal');
+            const content = document.getElementById('dashboardModalContent');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        window.onload = function() {
+            loadDB();
+        };
+
+    </script>
+</body>
+</html>
