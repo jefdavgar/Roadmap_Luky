@@ -91,13 +91,22 @@
         .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in; }
 
         /* Custom Scrollbar for Modal */
-        #detailModalContent, #editModalContent, #dashboardModalContent {
+        #detailModalContent, #editModalContent, #dashboardModalContent, #phaseModalContent {
             max-height: 90vh;
             display: flex;
             flex-direction: column;
         }
-        #detailModalScrollArea, #editModalScrollArea, #dashboardScrollArea {
+        #detailModalScrollArea, #editModalScrollArea, #dashboardScrollArea, #phaseModalScrollArea {
             overflow-y: auto;
+        }
+        
+        /* Custom CSS for simple filter animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+            animation: fadeIn 0.3s ease-out forwards;
         }
     </style>
 </head>
@@ -126,6 +135,11 @@
             <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                 <div id="progressBar" class="bg-blue-600 h-3 rounded-full progress-bar-fill" style="width: 0%"></div>
             </div>
+            
+            <!-- NEW FILTER CONTROL CONTAINER -->
+            <div id="filterControlContainer" class="mt-4">
+                <!-- Filter UI injected by JS -->
+            </div>
         </div>
     </header>
 
@@ -134,6 +148,13 @@
         <div class="timeline-line hidden md:block"></div>
         <div id="timelineContainer" class="space-y-12">
             <!-- Timeline injected by JS -->
+        </div>
+
+        <!-- Button to Add New Phase -->
+        <div class="relative z-10 text-center mt-12">
+            <button onclick="openPhaseModal(null)" class="inline-flex items-center bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition transform hover:scale-[1.01] active:scale-95">
+                <i data-lucide="folder-plus" class="w-5 h-5 mr-2"></i> Añadir Nueva Fase
+            </button>
         </div>
     </main>
 
@@ -186,7 +207,7 @@
         </div>
     </div>
 
-    <!-- EDIT / CREATE MODAL -->
+    <!-- EDIT / CREATE MILESTONE MODAL -->
     <div id="editModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all duration-300 scale-95" id="editModalContent">
             
@@ -206,11 +227,10 @@
 
                 <!-- Fila de Icono, Tiempo Estimado y Desarrollador -->
                 <div class="grid grid-cols-3 gap-4">
-                    <!-- Icono (Dropdown corregido) -->
+                    <!-- Icono (Dropdown) -->
                     <div>
                         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Icono (Lucide)</label>
                         <div class="relative flex items-center">
-                            <!-- Se usa pl-10 para dejar espacio al icono de preview -->
                             <select id="editInputIcon" 
                                     onchange="updateIconPreview(this.value)"
                                     class="w-full border border-gray-300 rounded-lg py-2 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none bg-white appearance-none text-sm">
@@ -287,6 +307,39 @@
             </div>
         </div>
     </div>
+    
+    <!-- PHASE EDIT/CREATE MODAL -->
+    <div id="phaseModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all duration-300 scale-95" id="phaseModalContent">
+            
+            <div class="bg-gray-800 p-4 text-white flex justify-between items-center">
+                <h2 id="phaseModalTitle" class="text-lg font-bold">Editar Fase</h2>
+                <button onclick="closeModal('phaseModal')" class="text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <div id="phaseModalScrollArea" class="p-6 space-y-4">
+                <input type="hidden" id="phaseId">
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Título de la Fase</label>
+                    <input type="text" id="phaseInputTitle" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej. Fase 1: Verificación de Riesgo">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha Límite (Deadline)</label>
+                    <input type="text" id="phaseInputDeadline" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej. 10 de Diciembre">
+                </div>
+
+                <div class="flex gap-3 pt-4 border-t border-gray-100">
+                    <button onclick="deletePhase()" id="btnDeletePhase" class="px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg font-medium transition">Eliminar Fase</button>
+                    <div class="flex-grow"></div>
+                    <button onclick="closeModal('phaseModal')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition">Cancelar</button>
+                    <button onclick="savePhase()" class="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow transition">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         // --- CONSTANTS ---
@@ -461,6 +514,10 @@
             }
         ];
 
+        // --- FILTER STATE ---
+        let showFilterUI = false;
+        let currentFilterText = '';
+
         // --- DATABASE ENGINE (JSON + LocalStorage) ---
         const DB_KEY = 'luky_roadmap_db_v4';
         let db = []; // In-memory database
@@ -498,7 +555,165 @@
             }
         }
 
-        // --- CRUD OPERATIONS ---
+        // --- FILTER LOGIC ---
+        
+        function toggleFilterVisibility() {
+            showFilterUI = !showFilterUI;
+            // Si ocultamos el filtro, limpiamos el texto para mostrar todo de nuevo
+            if (!showFilterUI) {
+                currentFilterText = '';
+            }
+            renderFilterUI();
+            renderTimeline();
+        }
+
+        function handleSearchInput(event) {
+            currentFilterText = event.target.value.toLowerCase();
+            renderTimeline(); // Re-render the timeline with the new filter
+        }
+
+        function renderFilterUI() {
+            const container = document.getElementById('filterControlContainer');
+            const buttonClass = showFilterUI
+                ? 'bg-red-500 hover:bg-red-600 text-white'
+                : 'bg-indigo-500 hover:bg-indigo-600 text-white';
+            
+            container.innerHTML = `
+                <div class="flex justify-between items-center mb-4 mt-4">
+                    <p class="text-xs text-gray-500">
+                        Filtra hitos por título, descripción, objetivo o desarrollador.
+                    </p>
+                    <button
+                        onclick="toggleFilterVisibility()"
+                        class="flex items-center px-4 py-2 text-sm font-medium rounded-full transition duration-300 shadow-md ${buttonClass}"
+                        aria-expanded="${showFilterUI}"
+                        aria-controls="filter-panel"
+                    >
+                        <i data-lucide="${showFilterUI ? 'x' : 'filter'}" class="w-4 h-4 mr-2"></i>
+                        ${showFilterUI ? 'Ocultar Filtro' : 'Mostrar Filtro'}
+                    </button>
+                </div>
+                
+                ${showFilterUI ? `
+                    <div id="filter-panel" class="p-4 border border-indigo-200 bg-indigo-50 rounded-lg animate-fadeIn">
+                        <label for="search-input" class="block text-sm font-medium text-indigo-700 mb-2 flex items-center">
+                            <i data-lucide="search" class="w-4 h-4 mr-1"></i>
+                            Término de Búsqueda
+                        </label>
+                        <input
+                            id="search-input"
+                            type="text"
+                            oninput="handleSearchInput(event)"
+                            value="${currentFilterText}"
+                            placeholder="Escribe el término de búsqueda aquí..."
+                            class="w-full px-3 py-2 border border-indigo-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                        />
+                    </div>
+                ` : ''}
+            `;
+            
+            lucide.createIcons();
+        }
+
+        function getFilteredDB() {
+            if (!currentFilterText) {
+                return db;
+            }
+
+            const filterText = currentFilterText.trim().toLowerCase();
+            
+            // Creamos una copia profunda de la estructura de la base de datos para contener los resultados filtrados
+            const filteredDB = db.map(phase => ({
+                ...phase,
+                milestones: phase.milestones.filter(m => {
+                    const searchPool = [
+                        m.title,
+                        m.description,
+                        m.developer,
+                        m.goal
+                    ].join(' ').toLowerCase();
+
+                    return searchPool.includes(filterText);
+                })
+            })).filter(phase => phase.milestones.length > 0); // Removemos fases sin hitos coincidentes
+            
+            return filteredDB;
+        }
+
+        // --- PHASE CRUD OPERATIONS ---
+
+        function openPhaseModal(phaseId = null) {
+            const modal = document.getElementById('phaseModal');
+            const content = document.getElementById('phaseModalContent');
+            
+            document.getElementById('phaseId').value = phaseId || 'NEW';
+            document.getElementById('btnDeletePhase').classList.add('hidden');
+
+            if (phaseId) {
+                // EDIT MODE
+                const phase = db.find(p => p.id === phaseId);
+                document.getElementById('phaseModalTitle').innerText = "Editar Fase Existente";
+                document.getElementById('phaseInputTitle').value = phase.title;
+                document.getElementById('phaseInputDeadline').value = phase.deadline;
+                document.getElementById('btnDeletePhase').classList.remove('hidden');
+            } else {
+                // CREATE MODE
+                document.getElementById('phaseModalTitle').innerText = "Crear Nueva Fase";
+                document.getElementById('phaseInputTitle').value = "";
+                document.getElementById('phaseInputDeadline').value = "";
+            }
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function savePhase() {
+            const phaseId = document.getElementById('phaseId').value;
+            const title = document.getElementById('phaseInputTitle').value;
+            const deadline = document.getElementById('phaseInputDeadline').value;
+            
+            if (!title) return alert("El título de la fase es obligatorio."); // Placeholder
+
+            if (phaseId === 'NEW') {
+                // Create
+                const newId = db.length > 0 ? Math.max(...db.map(p => p.id)) + 1 : 1;
+                db.push({
+                    id: newId,
+                    title: title,
+                    deadline: deadline,
+                    milestones: []
+                });
+            } else {
+                // Update
+                const pIndex = db.findIndex(p => p.id === parseInt(phaseId));
+                if (pIndex !== -1) {
+                    db[pIndex].title = title;
+                    db[pIndex].deadline = deadline;
+                }
+            }
+            
+            saveDB();
+            closeModal('phaseModal');
+        }
+
+        function deletePhase() {
+            const phaseId = document.getElementById('phaseId').value;
+            if (phaseId === 'NEW') return;
+
+            // Placeholder for custom modal
+            if (confirm("Al eliminar esta fase, se perderán todos los hitos asociados. ¿Estás seguro?")) { 
+                db = db.filter(p => p.id !== parseInt(phaseId));
+                saveDB();
+                closeModal('phaseModal');
+            }
+        }
+
+
+        // --- MILESTONE CRUD OPERATIONS ---
 
         // UPDATE STATUS (Main Milestone)
         function toggleMilestoneStatus(phaseId, milestoneId) {
@@ -563,7 +778,6 @@
                 document.getElementById('editModalTitle').innerText = "Editar Hito";
                 document.getElementById('editInputTitle').value = m.title;
                 document.getElementById('editInputTime').value = m.time;
-                // iconSelect.value = m.icon; // Set selected icon
                 document.getElementById('editInputDesc').value = m.description;
                 document.getElementById('editInputGoal').value = m.goal;
                 developerSelect.value = m.developer || DEVELOPERS[0]; // Set selected developer
@@ -673,9 +887,9 @@
         }
 
         function deleteMilestone() {
-            // Using custom modal since alert is forbidden
+            // Using confirm as a placeholder for a custom modal
             const modalMessage = "Esta acción eliminará el hito de forma permanente. ¿Estás seguro de que quieres continuar?";
-            if (confirm(modalMessage)) { // Usando confirm como un placeholder para un modal custom
+            if (confirm(modalMessage)) { 
                 const phaseId = parseInt(document.getElementById('editPhaseId').value);
                 const milestoneId = document.getElementById('editMilestoneId').value;
                 
@@ -693,8 +907,11 @@
         function renderTimeline() {
             const container = document.getElementById('timelineContainer');
             container.innerHTML = '';
+            
+            // --- CAMBIO CLAVE: Usar la DB filtrada ---
+            const dataToRender = getFilteredDB();
 
-            db.forEach((phase, index) => {
+            dataToRender.forEach((phase, index) => {
                 // Phase Header
                 const phaseDiv = document.createElement('div');
                 phaseDiv.className = "relative z-10 mb-8 text-center group/phase";
@@ -704,6 +921,13 @@
                             <span class="font-bold text-gray-800">${phase.title}</span>
                             <span class="text-xs text-gray-500 ml-2">Limite: ${phase.deadline}</span>
                         </div>
+                        
+                        <!-- Botón para Editar Fase -->
+                        <button onclick="openPhaseModal(${phase.id})" class="bg-gray-100 hover:bg-yellow-100 text-gray-500 hover:text-yellow-600 rounded-full p-1 transition" title="Editar Fase">
+                            <i data-lucide="pencil-ruler" class="w-4 h-4"></i>
+                        </button>
+
+                        <!-- Botón para Agregar Hito -->
                         <button onclick="openEditModal(${phase.id})" class="bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 rounded-full p-1 transition" title="Agregar Hito">
                             <i data-lucide="plus" class="w-4 h-4"></i>
                         </button>
@@ -962,6 +1186,8 @@
 
         window.onload = function() {
             loadDB();
+            // --- NUEVO: Renderizar la UI del filtro al cargar ---
+            renderFilterUI(); 
         };
 
     </script>
