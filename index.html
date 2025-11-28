@@ -1191,5 +1191,35 @@
         };
 
     </script>
+    <script>
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+        import { 
+            getFirestore, collection, doc, setDoc, getDoc 
+        } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyBn411MxjQ4Ue4TlhvU46waEN9Lpdg6r8s",
+            authDomain: "pivotal-cistern-479415-c4.firebaseapp.com",
+            projectId: "pivotal-cistern-479415-c4",
+            storageBucket: "pivotal-cistern-479415-c4.firebasestorage.app",
+            messagingSenderId: "1009406958138",
+            appId: "1:1009406958138:web:1d7fdb7bee642c931b3303",
+            measurementId: "G-M4BLVWXNEZ"
+        };
+
+        // Init Firebase
+        const app = initializeApp(firebaseConfig);
+        const dbFB = getFirestore(app);
+
+        console.log("☺♥ Firebase Connected Successfully");
+
+        // Test Firestore write
+        await setDoc(doc(collection(dbFB, "test"), "hello"), { message: "Hello Firebase!" });
+
+        // Test Firestore read
+        const snapshot = await getDoc(doc(dbFB, "test/hello"));
+        console.log("Read from Firestore:", snapshot.data());
+    </script>
 </body>
 </html>
