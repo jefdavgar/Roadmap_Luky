@@ -362,15 +362,13 @@
         const dbFB = getFirestore(app);
 
         console.log("☺♥ Firebase Connected Successfully");
-        console.log(app);
-        console.log(dbFB);
 
-        // Test Firestore write
-        await setDoc(doc(collection(dbFB, "test"), "hello"), { message: "Hello Firebase!" });
-
-        // Test Firestore read
-        const snapshot = await getDoc(doc(dbFB, "test/hello"));
-        console.log("Read from Firestore:", snapshot.data());
+        // Make Firestore globally accessible to the other script
+        window.dbFB = dbFB;
+        window.doc = doc;
+        window.collection = collection;
+        window.getDoc = getDoc;
+        window.setDoc = setDoc;
     </script>
 
     <script>
@@ -550,41 +548,74 @@
         let showFilterUI = false;
         let currentFilterText = '';
 
-        // --- DATABASE ENGINE (JSON + LocalStorage) ---
-        const DB_KEY = 'luky_roadmap_db_v4';
-        let db = []; // In-memory database
+        // --- DATABASE ENGINE (FIREBASE: FIRESTORE DATABASE) ---
+        // const DB_KEY = 'luky_roadmap_db_v4';
+        // let db = []; // In-memory database
+        let db = []; // In-memory DB representation
+        const FIREBASE_DOC_ID = "luky_roadmap_shared";
 
-        function loadDB() {
-            const stored = localStorage.getItem(DB_KEY);
-            if (stored) {
-                db = JSON.parse(stored);
-                // Sanity check: ensure all milestones have a developer field
-                db.forEach(phase => {
-                    phase.milestones.forEach(m => {
-                        if (typeof m.developer === 'undefined') {
-                            m.developer = "Desarrollador Jeferson";
-                        }
-                    });
-                });
-                saveDB(); // Save updated structure
+        // function loadDB() {
+        //     const stored = localStorage.getItem(DB_KEY);
+        //     if (stored) {
+        //         db = JSON.parse(stored);
+        //         // Sanity check: ensure all milestones have a developer field
+        //         db.forEach(phase => {
+        //             phase.milestones.forEach(m => {
+        //                 if (typeof m.developer === 'undefined') {
+        //                     m.developer = "Desarrollador Jeferson";
+        //                 }
+        //             });
+        //         });
+        //         saveDB(); // Save updated structure
+        //     } else {
+        //         db = JSON.parse(JSON.stringify(DEFAULT_DB)); // Deep copy
+        //         saveDB();
+        //     }
+        // }
+        async function loadDB() {
+            const ref = doc(collection(window.dbFB, "roadmap"), FIREBASE_DOC_ID);
+            const snapshot = await getDoc(ref);
+
+            if (snapshot.exists()) {
+                db = snapshot.data().db;
+                console.log("📥 Loaded DB from Firestore");
             } else {
-                db = JSON.parse(JSON.stringify(DEFAULT_DB)); // Deep copy
-                saveDB();
+                db = JSON.parse(JSON.stringify(DEFAULT_DB));
+                console.log("📦 No Firestore DB found, creating default");
+                await saveDB();
             }
-        }
 
-        function saveDB() {
-            localStorage.setItem(DB_KEY, JSON.stringify(db));
             renderTimeline();
             updateProgress();
         }
 
-        function resetData() {
-            // Using confirm as a placeholder for a custom modal
-            if(confirm("¿Seguro que quieres reiniciar todos los datos a la configuración inicial?")) { 
-                localStorage.removeItem(DB_KEY);
-                location.reload();
-            }
+        // function saveDB() {
+        //     localStorage.setItem(DB_KEY, JSON.stringify(db));
+        //     renderTimeline();
+        //     updateProgress();
+        // }
+        async function saveDB() {
+            const ref = doc(collection(window.dbFB, "roadmap"), FIREBASE_DOC_ID);
+            await setDoc(ref, { db });
+
+            console.log("📤 Saved DB to Firestore");
+
+            renderTimeline();
+            updateProgress();
+        }
+
+        // function resetData() {
+        //     // Using confirm as a placeholder for a custom modal
+        //     if(confirm("¿Seguro que quieres reiniciar todos los datos a la configuración inicial?")) { 
+        //         localStorage.removeItem(DB_KEY);
+        //         location.reload();
+        //     }
+        // }
+        async function resetData() {
+        if (confirm("¿Seguro que quieres reiniciar los datos para todos los usuarios?")) {
+            db = JSON.parse(JSON.stringify(DEFAULT_DB));
+            await saveDB();
+        }
         }
 
         // --- FILTER LOGIC ---
@@ -1216,10 +1247,14 @@
             }, 10);
         }
 
-        window.onload = function() {
-            loadDB();
-            // --- NUEVO: Renderizar la UI del filtro al cargar ---
-            renderFilterUI(); 
+        // window.onload = function() {
+        //     loadDB();
+        //     // --- NUEVO: Renderizar la UI del filtro al cargar ---
+        //     renderFilterUI(); 
+        // };
+        window.onload = async function() {
+            await loadDB();
+            renderFilterUI();
         };
 
     </script>    
