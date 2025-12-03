@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- jsPDF para generación de PDF de texto puro -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <style>
         body {
@@ -120,6 +122,9 @@
                     <h1 class="text-xl font-bold text-gray-900">Gestor de Roadmap Luky</h1>
                     <div class="flex gap-4 items-center text-xs text-gray-500">
                         <span class="hidden sm:block">Base de Datos Local (JSON)</span>
+                        <button onclick="generatePDF()" class="text-green-600 hover:text-green-700 font-semibold flex items-center gap-1 transition">
+                            <i data-lucide="download" class="w-4 h-4"></i> Descargar PDF
+                        </button>
                         <button onclick="resetData()" class="text-red-400 hover:text-red-600 underline">Restaurar Default</button>
                         <button onclick="openDashboardModal()" class="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-semibold transition">
                             <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Ver Dashboard
@@ -775,6 +780,46 @@
             }
         }
 
+        // --- PHASE REORDERING ---
+        function movePhaseUp(phaseId) {
+            const idx = db.findIndex(p => p.id === phaseId);
+            if (idx <= 0) return; // Can't move first phase up
+            
+            // Swap with previous phase
+            [db[idx], db[idx - 1]] = [db[idx - 1], db[idx]];
+            saveDB();
+        }
+
+        function movePhaseDown(phaseId) {
+            const idx = db.findIndex(p => p.id === phaseId);
+            if (idx >= db.length - 1) return; // Can't move last phase down
+            
+            // Swap with next phase
+            [db[idx], db[idx + 1]] = [db[idx + 1], db[idx]];
+            saveDB();
+        }
+
+        // --- MILESTONE REORDERING (within phase) ---
+        function moveMilestoneUp(phaseId, milestoneId) {
+            const phase = db.find(p => p.id === phaseId);
+            const idx = phase.milestones.findIndex(m => m.id === milestoneId);
+            if (idx <= 0) return; // Can't move first milestone up
+            
+            // Swap with previous milestone
+            [phase.milestones[idx], phase.milestones[idx - 1]] = [phase.milestones[idx - 1], phase.milestones[idx]];
+            saveDB();
+        }
+
+        function moveMilestoneDown(phaseId, milestoneId) {
+            const phase = db.find(p => p.id === phaseId);
+            const idx = phase.milestones.findIndex(m => m.id === milestoneId);
+            if (idx >= phase.milestones.length - 1) return; // Can't move last milestone down
+            
+            // Swap with next milestone
+            [phase.milestones[idx], phase.milestones[idx + 1]] = [phase.milestones[idx + 1], phase.milestones[idx]];
+            saveDB();
+        }
+
 
         // --- MILESTONE CRUD OPERATIONS ---
 
@@ -985,6 +1030,16 @@
                             <span class="text-xs text-gray-500 ml-2">Limite: ${phase.deadline}</span>
                         </div>
                         
+                        <!-- Botón Subir Fase -->
+                        <button onclick="movePhaseUp(${phase.id})" class="bg-gray-100 hover:bg-purple-100 text-gray-500 hover:text-purple-600 rounded-full p-1 transition disabled:opacity-50 disabled:cursor-not-allowed" title="Subir Fase" ${index === 0 ? 'disabled' : ''}>
+                            <i data-lucide="arrow-up" class="w-4 h-4"></i>
+                        </button>
+
+                        <!-- Botón Bajar Fase -->
+                        <button onclick="movePhaseDown(${phase.id})" class="bg-gray-100 hover:bg-purple-100 text-gray-500 hover:text-purple-600 rounded-full p-1 transition disabled:opacity-50 disabled:cursor-not-allowed" title="Bajar Fase" ${index === dataToRender.length - 1 ? 'disabled' : ''}>
+                            <i data-lucide="arrow-down" class="w-4 h-4"></i>
+                        </button>
+                        
                         <!-- Botón para Editar Fase -->
                         <button onclick="openPhaseModal(${phase.id})" class="bg-gray-100 hover:bg-yellow-100 text-gray-500 hover:text-yellow-600 rounded-full p-1 transition" title="Editar Fase">
                             <i data-lucide="pencil-ruler" class="w-4 h-4"></i>
@@ -1006,9 +1061,22 @@
                     
                     const cardHtml = `
                         <div class="w-full md:w-5/12 ${isLeft ? 'md:text-right' : 'md:order-last md:text-left'} order-last mt-4 md:mt-0 relative group">
-                            <button onclick="openEditModal(${phase.id}, '${m.id}')" class="edit-btn absolute top-2 ${isLeft ? 'left-2' : 'right-2'} z-20 bg-white shadow p-1.5 rounded-md text-gray-400 hover:text-blue-600 border border-gray-100" title="Editar Contenido">
-                                <i data-lucide="pencil" class="w-3 h-3"></i>
-                            </button>
+                            <div class="flex gap-1 absolute top-2 ${isLeft ? 'left-2' : 'right-2'} z-20">
+                                <!-- Botón Editar -->
+                                <button onclick="openEditModal(${phase.id}, '${m.id}')" class="edit-btn bg-white shadow p-1.5 rounded-md text-gray-400 hover:text-blue-600 border border-gray-100 transition" title="Editar Contenido">
+                                    <i data-lucide="pencil" class="w-3 h-3"></i>
+                                </button>
+
+                                <!-- Botón Subir Hito -->
+                                <button onclick="moveMilestoneUp(${phase.id}, '${m.id}')" class="edit-btn bg-white shadow p-1.5 rounded-md text-gray-400 hover:text-green-600 border border-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed" title="Subir Hito" ${mIndex === 0 ? 'disabled' : ''}>
+                                    <i data-lucide="arrow-up" class="w-3 h-3"></i>
+                                </button>
+
+                                <!-- Botón Bajar Hito -->
+                                <button onclick="moveMilestoneDown(${phase.id}, '${m.id}')" class="edit-btn bg-white shadow p-1.5 rounded-md text-gray-400 hover:text-green-600 border border-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed" title="Bajar Hito" ${mIndex === phase.milestones.length - 1 ? 'disabled' : ''}>
+                                    <i data-lucide="arrow-down" class="w-3 h-3"></i>
+                                </button>
+                            </div>
 
                             <div onclick="openDetailModal(${phase.id}, '${m.id}')" 
                                  class="milestone-card bg-white p-6 rounded-2xl shadow-sm border-l-4 ${m.isCompleted ? 'completed border-blue-500' : 'border-gray-300 hover:border-blue-400'}">
@@ -1247,11 +1315,239 @@
             }, 10);
         }
 
-        // window.onload = function() {
-        //     loadDB();
-        //     // --- NUEVO: Renderizar la UI del filtro al cargar ---
-        //     renderFilterUI(); 
-        // };
+        // --- GENERATE PDF LOGIC (Informe Transcrito) ---
+        async function generatePDF() {
+            try {
+                console.log('Generando informe transcrito...');
+                
+                // Usar jsPDF directamente para crear un documento de texto puro
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+
+                // Establecer fuente con soporte Unicode
+                doc.setFont('Helvetica');
+
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const margins = { top: 15, left: 15, right: 15, bottom: 15 };
+                const contentWidth = pageWidth - margins.left - margins.right;
+                let yPosition = margins.top;
+
+                // Estilos de fuentes
+                const titleFont = { size: 18, weight: 'bold' };
+                const subtitleFont = { size: 14, weight: 'bold' };
+                const headingFont = { size: 12, weight: 'bold' };
+                const normalFont = { size: 10, weight: 'normal' };
+                const smallFont = { size: 9, weight: 'normal' };
+
+                // Función auxiliar para agregar salto de página
+                function checkPageBreak(minSpace = 20) {
+                    if (yPosition + minSpace > pageHeight - margins.bottom) {
+                        doc.addPage();
+                        yPosition = margins.top;
+                    }
+                }
+
+                // Función para agregar texto con ajuste automático (CON SOPORTE UNICODE)
+                function addText(text, fontSize, isBold = false, indent = 0) {
+                    doc.setFontSize(fontSize);
+                    doc.setFont('Helvetica', isBold ? 'bold' : 'normal');
+                    
+                    // Asegurar que el texto sea string y limpiar caracteres problemáticos
+                    let cleanText = String(text || '').trim();
+                    
+                    const lines = doc.splitTextToSize(cleanText, contentWidth - indent);
+                    const lineHeight = fontSize / 2.2;
+                    
+                    lines.forEach((line, index) => {
+                        checkPageBreak(lineHeight);
+                        doc.text(line, margins.left + indent, yPosition);
+                        yPosition += lineHeight;
+                    });
+                    
+                    return lineHeight * lines.length;
+                }
+
+                // Función para agregar línea horizontal
+                function addHorizontalLine() {
+                    checkPageBreak(3);
+                    doc.setDrawColor(100, 150, 200);
+                    doc.line(margins.left, yPosition, pageWidth - margins.right, yPosition);
+                    yPosition += 5;
+                }
+
+                // ====== ENCABEZADO ======
+                doc.setTextColor(30, 50, 100);
+                addText('INFORME DE ROADMAP', titleFont.size, true);
+                doc.setTextColor(100, 100, 100);
+                addText('Plataforma Luky', subtitleFont.size, false);
+                addText('Fecha: ' + new Date().toLocaleDateString('es-ES'), smallFont.size, false);
+                yPosition += 5;
+                addHorizontalLine();
+                yPosition += 5;
+
+                // ====== RESUMEN EJECUTIVO ======
+                let totalMilestones = 0;
+                let completedMilestones = 0;
+                db.forEach(phase => {
+                    phase.milestones.forEach(m => {
+                        totalMilestones++;
+                        if (m.isCompleted) completedMilestones++;
+                    });
+                });
+                const totalProgress = totalMilestones === 0 ? 0 : Math.round((completedMilestones / totalMilestones) * 100);
+
+                doc.setTextColor(30, 50, 100);
+                addText('RESUMEN EJECUTIVO', headingFont.size, true);
+                doc.setTextColor(0, 0, 0);
+                addText('Progreso Total: ' + totalProgress + '% (' + completedMilestones + ' de ' + totalMilestones + ' hitos completados)', normalFont.size, false);
+                yPosition += 5;
+
+                // ====== CONTENIDO PRINCIPAL: FASES E HITOS ======
+                db.forEach((phase, phaseIdx) => {
+                    // Salto de página antes de cada fase (excepto la primera)
+                    if (phaseIdx > 0) {
+                        doc.addPage();
+                        yPosition = margins.top;
+                    }
+
+                    checkPageBreak(15);
+
+                    // Encabezado de fase
+                    doc.setTextColor(30, 80, 150);
+                    addText('FASE ' + (phaseIdx + 1) + ': ' + phase.title, subtitleFont.size, true);
+                    
+                    doc.setTextColor(100, 100, 100);
+                    const phaseCompleted = phase.milestones.every(m => m.isCompleted);
+                    const phaseCompletedCount = phase.milestones.filter(m => m.isCompleted).length;
+                    const phaseStatus = phaseCompleted ? '[COMPLETA]' : '[EN PROGRESO]';
+                    
+                    addText(
+                        'Deadline: ' + phase.deadline + ' | Hitos: ' + phase.milestones.length + ' | Completados: ' + phaseCompletedCount + '/' + phase.milestones.length + ' | Estado: ' + phaseStatus,
+                        smallFont.size,
+                        false
+                    );
+                    yPosition += 5;
+
+                    // Hitos de la fase
+                    phase.milestones.forEach((milestone, mIdx) => {
+                        checkPageBreak(20);
+
+                        // Número y título del hito
+                        doc.setTextColor(40, 40, 40);
+                        const milestoneNum = (phaseIdx + 1) + '.' + (mIdx + 1);
+                        const statusIcon = milestone.isCompleted ? '[OK]' : '[--]';
+                        addText(
+                            statusIcon + ' ' + milestoneNum + '. ' + milestone.title,
+                            headingFont.size,
+                            true,
+                            0
+                        );
+
+                        // Información general
+                        doc.setTextColor(80, 80, 80);
+                        addText(
+                            'Tiempo Estimado: ' + milestone.time + ' | Desarrollador: ' + (milestone.developer || 'No asignado'),
+                            smallFont.size,
+                            false,
+                            5
+                        );
+
+                        if (milestone.isCompleted) {
+                            doc.setTextColor(34, 197, 94);
+                            addText('Estado: COMPLETADO', smallFont.size, true, 5);
+                        } else {
+                            doc.setTextColor(245, 158, 11);
+                            addText('Estado: PENDIENTE', smallFont.size, true, 5);
+                        }
+
+                        yPosition += 3;
+
+                        // Descripción
+                        doc.setTextColor(0, 0, 0);
+                        addText('Descripcion:', normalFont.size, true, 5);
+                        addText(milestone.description || 'Sin descripcion', normalFont.size, false, 10);
+                        yPosition += 3;
+
+                        // Objetivo
+                        addText('Objetivo:', normalFont.size, true, 5);
+                        addText(milestone.goal || 'Sin objetivo definido', normalFont.size, false, 10);
+                        yPosition += 3;
+
+                        // Checklist
+                        if (milestone.checklist && milestone.checklist.length > 0) {
+                            const completedItems = milestone.checklist.filter(c => c.isChecked).length;
+                            const totalItems = milestone.checklist.length;
+                            const checklistPercent = Math.round((completedItems / totalItems) * 100);
+
+                            addText(
+                                'Checklist (' + completedItems + '/' + totalItems + ' - ' + checklistPercent + '%):',
+                                normalFont.size,
+                                true,
+                                5
+                            );
+
+                            milestone.checklist.forEach(item => {
+                                const itemIcon = item.isChecked ? '[X]' : '[ ]';
+                                const itemText = item.text || '';
+                                const textColor = item.isChecked ? [150, 150, 150] : [0, 0, 0];
+                                doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+                                addText(
+                                    itemIcon + ' ' + itemText,
+                                    smallFont.size,
+                                    false,
+                                    15
+                                );
+                            });
+                        }
+
+                        yPosition += 5;
+                    });
+
+                    // Línea separadora entre fases
+                    if (phaseIdx < db.length - 1) {
+                        yPosition += 5;
+                        checkPageBreak(10);
+                        doc.setDrawColor(200, 200, 200);
+                        doc.line(margins.left, yPosition, pageWidth - margins.right, yPosition);
+                        yPosition += 5;
+                    }
+                });
+
+                // ====== PIE DE PÁGINA ======
+                doc.addPage();
+                yPosition = margins.top;
+                
+                doc.setTextColor(100, 100, 100);
+                addHorizontalLine();
+                addText(
+                    'Documento generado automaticamente por el Gestor de Roadmap Luky',
+                    smallFont.size,
+                    false
+                );
+                addText(
+                    'Plataforma de Planificacion y Seguimiento de Proyectos',
+                    smallFont.size,
+                    false
+                );
+
+                // ====== DESCARGAR PDF ======
+                doc.save('roadmap-luky-' + new Date().toISOString().split('T')[0] + '.pdf');
+                console.log('PDF generado exitosamente');
+                alert('PDF descargado exitosamente como informe transcrito');
+
+            } catch (error) {
+                console.error('Error al generar PDF:', error);
+                alert('Error al generar PDF: ' + error.message);
+            }
+        }
+
+        // --- END PDF LOGIC ---
+
         window.onload = async function() {
             await loadDB();
             renderFilterUI();
