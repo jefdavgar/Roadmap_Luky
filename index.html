@@ -12,6 +12,8 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- jsPDF para generación de PDF de texto puro -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Marked.js para convertir Markdown a HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <style>
         body {
@@ -124,6 +126,9 @@
                         <span class="hidden sm:block">Base de Datos Local (JSON)</span>
                         <button onclick="generatePDF()" class="text-green-600 hover:text-green-700 font-semibold flex items-center gap-1 transition">
                             <i data-lucide="download" class="w-4 h-4"></i> Descargar PDF
+                        </button>
+                        <button onclick="openAIPDFModal()" class="text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-1 transition">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i> PDF con IA
                         </button>
                         <button onclick="resetData()" class="text-red-400 hover:text-red-600 underline">Restaurar Default</button>
                         <button onclick="openDashboardModal()" class="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-semibold transition">
@@ -341,6 +346,59 @@
                     <button onclick="closeModal('phaseModal')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition">Cancelar</button>
                     <button onclick="savePhase()" class="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow transition">Guardar</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI PDF GENERATION MODAL -->
+    <div id="aiPDFModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all duration-300 scale-95" id="aiPDFModalContent">
+            
+            <div class="bg-gradient-to-r from-purple-600 to-purple-700 p-4 text-white flex justify-between items-center">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <i data-lucide="sparkles" class="w-5 h-5"></i> Generar PDF con IA
+                </h2>
+                <button onclick="closeModal('aiPDFModal')" class="text-gray-300 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <div id="aiPDFModalScrollArea" class="p-6 space-y-4">
+                <!-- API Key Input -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">API Key de Google Gemini</label>
+                    <input type="password" id="geminiApiKeyPDF" class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Pega tu API key de Google Gemini aqui">
+                    <p class="text-xs text-gray-500 mt-1">Obtén tu API key en <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-purple-600 hover:underline">Google AI Studio</a></p>
+                </div>
+
+                <!-- Options -->
+                <div>
+                    <label class="flex items-center cursor-pointer gap-2">
+                        <input type="checkbox" id="includePrioritization" checked class="w-4 h-4">
+                        <span class="text-sm">Incluir análisis de priorización</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer gap-2 mt-2">
+                        <input type="checkbox" id="includeAlerts" checked class="w-4 h-4">
+                        <span class="text-sm">Incluir alertas de incumplimientos</span>
+                    </label>
+                    <label class="flex items-center cursor-pointer gap-2 mt-2">
+                        <input type="checkbox" id="includeRecommendations" checked class="w-4 h-4">
+                        <span class="text-sm">Incluir recomendaciones</span>
+                    </label>
+                </div>
+
+                <!-- Loading Spinner -->
+                <div id="aiPDFLoadingSpinner" class="hidden flex items-center justify-center py-6">
+                    <div class="animate-spin">
+                        <i data-lucide="loader" class="w-6 h-6 text-purple-600"></i>
+                    </div>
+                    <span class="ml-3 text-gray-600">Generando PDF con IA...</span>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 p-4 border-t border-gray-200 flex gap-3">
+                <button onclick="closeModal('aiPDFModal')" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition">Cancelar</button>
+                <button onclick="generatePDFWithAI()" class="px-6 py-2 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 shadow transition flex items-center gap-2">
+                    <i data-lucide="download" class="w-4 h-4"></i> Generar PDF
+                </button>
             </div>
         </div>
     </div>
@@ -1375,15 +1433,15 @@
                 // Función para agregar línea horizontal
                 function addHorizontalLine() {
                     checkPageBreak(3);
-                    doc.setDrawColor(100, 150, 200);
+                    doc.setDrawColor(40, 40, 40);
                     doc.line(margins.left, yPosition, pageWidth - margins.right, yPosition);
                     yPosition += 5;
                 }
 
                 // ====== ENCABEZADO ======
-                doc.setTextColor(30, 50, 100);
+                doc.setTextColor(0, 0, 0);
                 addText('INFORME DE ROADMAP', titleFont.size, true);
-                doc.setTextColor(100, 100, 100);
+                doc.setTextColor(80, 80, 80);
                 addText('Plataforma Luky', subtitleFont.size, false);
                 addText('Fecha: ' + new Date().toLocaleDateString('es-ES'), smallFont.size, false);
                 yPosition += 5;
@@ -1401,9 +1459,9 @@
                 });
                 const totalProgress = totalMilestones === 0 ? 0 : Math.round((completedMilestones / totalMilestones) * 100);
 
-                doc.setTextColor(30, 50, 100);
-                addText('RESUMEN EJECUTIVO', headingFont.size, true);
                 doc.setTextColor(0, 0, 0);
+                addText('RESUMEN EJECUTIVO', headingFont.size, true);
+                doc.setTextColor(30, 30, 30);
                 addText('Progreso Total: ' + totalProgress + '% (' + completedMilestones + ' de ' + totalMilestones + ' hitos completados)', normalFont.size, false);
                 yPosition += 5;
 
@@ -1418,10 +1476,13 @@
                     checkPageBreak(15);
 
                     // Encabezado de fase
-                    doc.setTextColor(30, 80, 150);
+                    doc.setTextColor(0, 0, 0);
                     addText('FASE ' + (phaseIdx + 1) + ': ' + phase.title, subtitleFont.size, true);
                     
-                    doc.setTextColor(100, 100, 100);
+                    doc.setTextColor(0, 0, 0);
+                    addText('FASE ' + (phaseIdx + 1) + ': ' + phase.title, subtitleFont.size, true);
+                    
+                    doc.setTextColor(60, 60, 60);
                     const phaseCompleted = phase.milestones.every(m => m.isCompleted);
                     const phaseCompletedCount = phase.milestones.filter(m => m.isCompleted).length;
                     const phaseStatus = phaseCompleted ? '[COMPLETA]' : '[EN PROGRESO]';
@@ -1438,7 +1499,7 @@
                         checkPageBreak(20);
 
                         // Número y título del hito
-                        doc.setTextColor(40, 40, 40);
+                        doc.setTextColor(0, 0, 0);
                         const milestoneNum = (phaseIdx + 1) + '.' + (mIdx + 1);
                         const statusIcon = milestone.isCompleted ? '[OK]' : '[--]';
                         addText(
@@ -1458,10 +1519,10 @@
                         );
 
                         if (milestone.isCompleted) {
-                            doc.setTextColor(34, 197, 94);
+                            doc.setTextColor(60, 60, 60);
                             addText('Estado: COMPLETADO', smallFont.size, true, 5);
                         } else {
-                            doc.setTextColor(245, 158, 11);
+                            doc.setTextColor(100, 100, 100);
                             addText('Estado: PENDIENTE', smallFont.size, true, 5);
                         }
 
@@ -1547,6 +1608,558 @@
         }
 
         // --- END PDF LOGIC ---
+
+        // --- AI PDF GENERATION LOGIC (GEMINI) ---
+        
+        function openAIPDFModal() {
+            const modal = document.getElementById('aiPDFModal');
+            const content = document.getElementById('aiPDFModalContent');
+            
+            // Reset spinner
+            document.getElementById('aiPDFLoadingSpinner').classList.add('hidden');
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        // Helper: Analyze roadmap to detect issues and prioritization
+        function analyzeRoadmapMetrics() {
+            const metrics = {
+                totalMilestones: 0,
+                completedMilestones: 0,
+                overdueFases: [],
+                almostComplete: [],
+                notStarted: [],
+                blockedMilestones: [],
+                developerWorkload: {}
+            };
+
+            DEVELOPERS.forEach(dev => {
+                metrics.developerWorkload[dev] = { total: 0, completed: 0 };
+            });
+
+            db.forEach((phase, phaseIdx) => {
+                phase.milestones.forEach(m => {
+                    metrics.totalMilestones++;
+                    if (m.isCompleted) metrics.completedMilestones++;
+                    
+                    // Track developer workload
+                    const dev = m.developer || DEVELOPERS[0];
+                    if (metrics.developerWorkload[dev]) {
+                        metrics.developerWorkload[dev].total++;
+                        if (m.isCompleted) metrics.developerWorkload[dev].completed++;
+                    }
+
+                    // Detect almost complete milestones (80%+ checklist done)
+                    if (m.checklist.length > 0 && !m.isCompleted) {
+                        const checklistProgress = m.checklist.filter(c => c.isChecked).length / m.checklist.length;
+                        if (checklistProgress >= 0.8) {
+                            metrics.almostComplete.push({ phase: phase.title, milestone: m.title, progress: Math.round(checklistProgress * 100) });
+                        }
+                    }
+
+                    // Detect not started
+                    if (!m.isCompleted && m.checklist.length > 0) {
+                        const checklistProgress = m.checklist.filter(c => c.isChecked).length / m.checklist.length;
+                        if (checklistProgress === 0) {
+                            metrics.notStarted.push({ phase: phase.title, milestone: m.title, time: m.time });
+                        }
+                    }
+                });
+            });
+
+            return metrics;
+        }
+
+        // Process Markdown content for PDF with professional formatting
+        function processMarkdownForPDF(markdownText, doc, margins, contentWidth, startYPosition) {
+            if (!markdownText) return startYPosition;
+            
+            const pageHeight = doc.internal.pageSize.getHeight();
+            let yPosition = startYPosition;
+            
+            // Helper function to render styled text (handles ** for bold)
+            function renderStyledText(text, baseSize, baseColor, xPos) {
+                let x = xPos;
+                let parts = text.split(/(\*\*.*?\*\*)/);  // Split by ** markers
+                
+                parts.forEach(part => {
+                    if (part.match(/^\*\*.+\*\*$/)) {
+                        // Bold text
+                        const boldText = part.replace(/\*\*/g, '');
+                        doc.setFont('Helvetica', 'bold');
+                        doc.setTextColor(0, 0, 0);
+                        doc.text(String(boldText), x, yPosition);
+                        x += doc.getStringUnitWidth(boldText) * baseSize / doc.internal.scaleFactor;
+                    } else if (part) {
+                        // Normal text
+                        doc.setFont('Helvetica', 'normal');
+                        doc.setTextColor(baseColor[0], baseColor[1], baseColor[2]);
+                        doc.text(String(part), x, yPosition);
+                        x += doc.getStringUnitWidth(part) * baseSize / doc.internal.scaleFactor;
+                    }
+                });
+            }
+            
+            // Split by lines
+            const lines = markdownText.split('\n');
+            let i = 0;
+            
+            while (i < lines.length) {
+                let line = lines[i].trim();
+                i++;
+                
+                if (!line) {
+                    yPosition += 6;
+                    continue;
+                }
+                
+                // Check page break
+                if (yPosition + 12 > pageHeight - margins.bottom) {
+                    doc.addPage();
+                    yPosition = margins.top;
+                }
+                
+                // Main heading (##)
+                if (line.match(/^##\s+/)) {
+                    const title = line.replace(/^##\s+/, '').trim();
+                    yPosition += 4;
+                    
+                    doc.setFontSize(16);
+                    doc.setFont('Helvetica', 'bold');
+                    doc.setTextColor(0, 0, 0);
+                    
+                    const titleLines = doc.splitTextToSize(title, contentWidth);
+                    titleLines.forEach(tline => {
+                        if (yPosition + 8 > pageHeight - margins.bottom) {
+                            doc.addPage();
+                            yPosition = margins.top;
+                        }
+                        doc.text(String(tline), margins.left, yPosition);
+                        yPosition += 6;
+                    });
+                    yPosition += 3;
+                    continue;
+                }
+                
+                // Subheading (###)
+                if (line.match(/^###\s+/)) {
+                    const subtitle = line.replace(/^###\s+/, '').trim();
+                    yPosition += 2;
+                    
+                    doc.setFontSize(12);
+                    doc.setFont('Helvetica', 'bold');
+                    doc.setTextColor(20, 20, 20);
+                    
+                    const subLines = doc.splitTextToSize(subtitle, contentWidth);
+                    subLines.forEach(sline => {
+                        if (yPosition + 7 > pageHeight - margins.bottom) {
+                            doc.addPage();
+                            yPosition = margins.top;
+                        }
+                        doc.text(String(sline), margins.left, yPosition);
+                        yPosition += 5;
+                    });
+                    yPosition += 2;
+                    continue;
+                }
+                
+                // Bullet points (- or *) or numbered lists (1. 2. etc)
+                if (line.match(/^[\*\-]\s+/) || line.match(/^\d+\.\s+/)) {
+                    let bulletText = line;
+                    
+                    // Handle numbered lists
+                    if (line.match(/^\d+\.\s+/)) {
+                        bulletText = line.replace(/^\d+\.\s+/, '').trim();
+                    } else {
+                        bulletText = line.replace(/^[\*\-]\s+/, '').trim();
+                    }
+                    
+                    doc.setFontSize(11);
+                    
+                    // Check if bullet contains bold text
+                    if (bulletText.includes('**')) {
+                        const bulletContent = doc.splitTextToSize(bulletText, contentWidth - 5);
+                        bulletContent.forEach((bline, idx) => {
+                            if (yPosition + 5 > pageHeight - margins.bottom) {
+                                doc.addPage();
+                                yPosition = margins.top;
+                            }
+                            
+                            let displayLine = String(bline);
+                            
+                            if (idx === 0) {
+                                // First line with bullet
+                                doc.text('• ', margins.left + 2, yPosition);
+                                
+                                // Render styled text after bullet
+                                let lineParts = displayLine.split(/(\*\*.*?\*\*)/);
+                                let xOffset = margins.left + 7;
+                                
+                                lineParts.forEach(part => {
+                                    if (part.match(/^\*\*.+\*\*$/)) {
+                                        const boldText = part.replace(/\*\*/g, '');
+                                        doc.setFontSize(11);
+                                        doc.setFont('Helvetica', 'bold');
+                                        doc.setTextColor(0, 0, 0);
+                                        doc.text(String(boldText), xOffset, yPosition);
+                                        xOffset += doc.getStringUnitWidth(boldText) * 11 / doc.internal.scaleFactor;
+                                    } else if (part) {
+                                        doc.setFontSize(11);
+                                        doc.setFont('Helvetica', 'normal');
+                                        doc.setTextColor(30, 30, 30);
+                                        doc.text(String(part), xOffset, yPosition);
+                                        xOffset += doc.getStringUnitWidth(part) * 11 / doc.internal.scaleFactor;
+                                    }
+                                });
+                            } else {
+                                // Continuation lines indented
+                                doc.setFontSize(10);
+                                doc.setFont('Helvetica', 'normal');
+                                doc.setTextColor(30, 30, 30);
+                                doc.text(String(displayLine), margins.left + 5, yPosition);
+                            }
+                            yPosition += 5.5;
+                        });
+                    } else {
+                        // No bold, render normally
+                        const bulletContent = doc.splitTextToSize(bulletText, contentWidth - 5);
+                        bulletContent.forEach((bline, idx) => {
+                            if (yPosition + 5 > pageHeight - margins.bottom) {
+                                doc.addPage();
+                                yPosition = margins.top;
+                            }
+                            
+                            if (idx === 0) {
+                                doc.text('• ' + String(bline), margins.left + 2, yPosition);
+                            } else {
+                                doc.text(String(bline), margins.left + 5, yPosition);
+                            }
+                            yPosition += 5.5;
+                        });
+                    }
+                    yPosition += 4;  // Extra spacing after bullet group
+                    continue;
+                }
+                
+                // Regular text with bold formatting
+                let displayText = line;
+                
+                // Check if line contains bold text
+                if (displayText.includes('**')) {
+                    doc.setFontSize(11);
+                    
+                    // Split text by ** markers, but reconstruct the line properly
+                    const parts = displayText.split(/(\*\*.*?\*\*)/);
+                    let currentY = yPosition;
+                    
+                    // Reconstruct the full line and split it at word boundaries
+                    let fullText = '';
+                    let styles = [];
+                    
+                    parts.forEach(part => {
+                        if (part.match(/^\*\*.+\*\*$/)) {
+                            const boldText = part.replace(/\*\*/g, '');
+                            fullText += boldText;
+                            styles.push({ start: fullText.length - boldText.length, end: fullText.length, bold: true });
+                        } else if (part) {
+                            fullText += part;
+                        }
+                    });
+                    
+                    // Split full text into lines
+                    const styledLines = doc.splitTextToSize(fullText, contentWidth);
+                    
+                    styledLines.forEach((line) => {
+                        if (currentY + 6 > pageHeight - margins.bottom) {
+                            doc.addPage();
+                            currentY = margins.top;
+                        }
+                        
+                        // Simple approach: render the line and apply bold to parts
+                        doc.setFontSize(11);
+                        doc.setFont('Helvetica', 'normal');
+                        doc.setTextColor(30, 30, 30);
+                        doc.text(String(line), margins.left, currentY);
+                        currentY += 5.8;
+                    });
+                    
+                    yPosition = currentY;
+                    yPosition += 5;  // Extra spacing after paragraph
+                } else {
+                    // No bold, render as normal text
+                    doc.setFontSize(11);
+                    doc.setFont('Helvetica', 'normal');
+                    doc.setTextColor(30, 30, 30);
+                    
+                    const textLines = doc.splitTextToSize(String(displayText), contentWidth);
+                    textLines.forEach(tline => {
+                        if (yPosition + 6 > pageHeight - margins.bottom) {
+                            doc.addPage();
+                            yPosition = margins.top;
+                        }
+                        doc.text(String(tline), margins.left, yPosition);
+                        yPosition += 5.8;
+                    });
+                    yPosition += 5;  // Extra spacing after paragraph
+                }
+            }
+            
+            return yPosition;
+        }
+
+        async function generatePDFWithAI() {
+            const apiKey = document.getElementById('geminiApiKeyPDF').value.trim();
+            if (!apiKey) {
+                alert('Por favor ingresa tu API Key de Google Gemini');
+                return;
+            }
+
+            const includePrioritization = document.getElementById('includePrioritization').checked;
+            const includeAlerts = document.getElementById('includeAlerts').checked;
+            const includeRecommendations = document.getElementById('includeRecommendations').checked;
+
+            // Show loading spinner
+            document.getElementById('aiPDFLoadingSpinner').classList.remove('hidden');
+
+            try {
+                // Get metrics
+                const metrics = analyzeRoadmapMetrics();
+
+                // Prepare roadmap data for AI
+                let roadmapText = 'ROADMAP LUKY ACTUAL:\n\n';
+                
+                db.forEach((phase, phaseIdx) => {
+                    roadmapText += 'FASE ' + (phaseIdx + 1) + ': ' + phase.title + ' (Deadline: ' + phase.deadline + ')\n';
+                    
+                    phase.milestones.forEach((m, mIdx) => {
+                        const checklistProgress = m.checklist.length > 0 ? Math.round((m.checklist.filter(c => c.isChecked).length / m.checklist.length) * 100) : 0;
+                        roadmapText += '  - ' + m.title + ' (' + m.time + ', ' + m.developer + ') [' + (m.isCompleted ? 'COMPLETA' : checklistProgress + '%') + ']\n';
+                    });
+                    roadmapText += '\n';
+                });
+
+                // Build AI prompt
+                let aiPrompt = 'Eres un experto en gestión de proyectos. Genera un resumen ejecutivo profesional para este roadmap de desarrollo.\n\n';
+                aiPrompt += roadmapText + '\n';
+                aiPrompt += 'PROPORCIONA UN RESUMEN EJECUTIVO QUE INCLUYA:\n\n';
+                aiPrompt += '## Resumen Ejecutivo\n';
+                aiPrompt += 'Estado actual del proyecto (% completado, hitos clave)\n\n';
+                aiPrompt += '## Avance por Fase\n';
+                aiPrompt += 'Timeline y progreso detallado de cada fase\n\n';
+                aiPrompt += '## Métricas Clave\n';
+                aiPrompt += 'Total de hitos: ' + metrics.totalMilestones + ', Completados: ' + metrics.completedMilestones + '\n\n';
+                
+                if (includeAlerts && (metrics.notStarted.length > 0 || metrics.almostComplete.length > 0)) {
+                    aiPrompt += '## Alertas Críticas\n';
+                    if (metrics.notStarted.length > 0) {
+                        aiPrompt += 'Hitos no iniciados: ' + metrics.notStarted.length + '\n';
+                    }
+                    if (metrics.almostComplete.length > 0) {
+                        aiPrompt += 'Hitos próximos a completar (80%+): ' + metrics.almostComplete.length + '\n';
+                    }
+                    aiPrompt += '\n';
+                }
+
+                if (includePrioritization) {
+                    aiPrompt += '## Recomendaciones de Priorización\n';
+                    aiPrompt += 'Qué debería iniciarse/completarse primero\n\n';
+                }
+
+                if (includeRecommendations) {
+                    aiPrompt += '## Recomendaciones de Mejora\n';
+                    aiPrompt += 'Mejora y optimización del equipo\n\n';
+                }
+
+                aiPrompt += '\nUsa un tono profesional, breve y directo. Enfócate en datos y hechos para la toma de decisiones.';
+
+                // Call Gemini API (usando gemini-2.0-flash que es el modelo más reciente y disponible)
+                const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: aiPrompt
+                            }]
+                        }]
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || 'Error en la API de Gemini');
+                }
+
+                const data = await response.json();
+                let aiContent = data.candidates[0].content.parts[0].text;
+
+                // Now generate PDF with AI content
+                document.getElementById('aiPDFLoadingSpinner').innerHTML = '<div class="animate-spin"><i data-lucide="loader" class="w-6 h-6 text-purple-600"></i></div><span class="ml-3 text-gray-600">Generando PDF...</span>';
+                
+                generateEnhancedPDF(aiContent, metrics, includeAlerts, includePrioritization);
+                
+                document.getElementById('aiPDFLoadingSpinner').classList.add('hidden');
+                closeModal('aiPDFModal');
+                alert('PDF generado exitosamente con análisis de IA');
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('aiPDFLoadingSpinner').classList.add('hidden');
+                alert('Error al generar PDF con IA: ' + error.message + '\n\nVerifica que tu API Key sea valida.');
+            }
+        }
+
+        // Enhanced PDF generation with AI content
+        async function generateEnhancedPDF(aiContent, metrics, includeAlerts, includePrioritization) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+
+                doc.setFont('Helvetica');
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const margins = { top: 15, left: 15, right: 15, bottom: 15 };
+                const contentWidth = pageWidth - margins.left - margins.right;
+                let yPosition = margins.top;
+
+                function checkPageBreak(minSpace = 20) {
+                    if (yPosition + minSpace > pageHeight - margins.bottom) {
+                        doc.addPage();
+                        yPosition = margins.top;
+                    }
+                }
+
+                function addText(text, fontSize, isBold = false, indent = 0) {
+                    const cleanText = String(text || '').trim();
+                    if (!cleanText) return;
+                    
+                    doc.setFontSize(fontSize);
+                    doc.setFont('Helvetica', isBold ? 'bold' : 'normal');
+                    
+                    const maxWidth = Math.max(10, contentWidth - indent);
+                    const lines = doc.splitTextToSize(cleanText, maxWidth);
+                    const lineHeight = fontSize / 2.2;
+                    
+                    lines.forEach((line) => {
+                        const lineStr = String(line).trim();
+                        if (!lineStr) return;
+                        checkPageBreak(lineHeight + 2);
+                        const xPos = parseFloat((margins.left + indent).toFixed(2));
+                        const yPos = parseFloat(yPosition.toFixed(2));
+                        doc.text(String(lineStr), xPos, yPos);
+                        yPosition += lineHeight;
+                    });
+                }
+
+                function addHorizontalLine() {
+                    checkPageBreak(3);
+                    doc.setDrawColor(40, 40, 40);
+                    const x1 = parseFloat(margins.left.toFixed(2));
+                    const x2 = parseFloat((pageWidth - margins.right).toFixed(2));
+                    const y = parseFloat(yPosition.toFixed(2));
+                    doc.line(x1, y, x2, y);
+                    yPosition += 5;
+                }
+
+                // ====== HEADER ======
+                doc.setTextColor(0, 0, 0);
+                addText('INFORME EJECUTIVO - ROADMAP LUKY', 18, true);
+                doc.setTextColor(100, 100, 100);
+                addText('Generado con análisis de IA', 10, false);
+                
+                // Date without addText to avoid formatting issues
+                const dateStr = new Date().toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+                doc.setTextColor(100, 100, 100);
+                doc.setFontSize(9);
+                doc.setFont('Helvetica', 'normal');
+                doc.text('Fecha: ' + String(dateStr), parseFloat(margins.left.toFixed(2)), yPosition);
+                yPosition += 4;
+                
+                yPosition += 5;
+                yPosition += 5;
+
+                // ====== ALERTAS ======
+                if (includeAlerts && (metrics.notStarted.length > 0 || metrics.almostComplete.length > 0)) {
+                    yPosition += 2;
+                    doc.setTextColor(200, 0, 0);
+                    addText('ALERTAS Y ATENCIONES', 12, true);
+                    
+                    doc.setTextColor(50, 50, 50);
+                    if (metrics.notStarted.length > 0) {
+                        addText(String(metrics.notStarted.length) + ' hito(s) no iniciado(s):', 10, true);
+                        metrics.notStarted.slice(0, 3).forEach(item => {
+                            addText('• ' + String(item.milestone) + ' (' + String(item.phase) + ')', 9, false, 3);
+                        });
+                        if (metrics.notStarted.length > 3) {
+                            addText('+ ' + String(metrics.notStarted.length - 3) + ' mas...', 9, false, 3);
+                        }
+                        yPosition += 2;
+                    }
+                    
+                    if (metrics.almostComplete.length > 0) {
+                        addText(String(metrics.almostComplete.length) + ' hito(s) proximos a completar (80%+):', 10, true);
+                        metrics.almostComplete.slice(0, 3).forEach(item => {
+                            addText('• ' + String(item.milestone) + ' (' + String(item.progress) + '%) - ' + String(item.phase), 9, false, 3);
+                        });
+                        if (metrics.almostComplete.length > 3) {
+                            addText('+ ' + String(metrics.almostComplete.length - 3) + ' mas...', 9, false, 3);
+                        }
+                        yPosition += 2;
+                    }
+                }
+
+
+
+                // ====== ANÁLISIS DE IA ======
+                checkPageBreak(20);
+                yPosition += 3;
+                addHorizontalLine()
+                yPosition += 2;
+                
+                doc.setTextColor(0, 0, 0);
+                addText('ANÁLISIS Y RECOMENDACIONES', 14, true);
+                yPosition += 1;
+                doc.setTextColor(30, 30, 30);
+                
+                // Add AI content with Markdown formatting support
+                const aiContentStr = String(aiContent || '').trim();
+                if (aiContentStr) {
+                    yPosition = processMarkdownForPDF(aiContentStr, doc, margins, contentWidth, yPosition);
+                }
+
+                // ====== FOOTER ======
+                yPosition = pageHeight - margins.bottom - 10;
+                addHorizontalLine();
+                doc.setTextColor(100, 100, 100);
+                doc.setFontSize(8);
+                const footerXLeft = parseFloat(margins.left.toFixed(2));
+                const footerXRight = parseFloat((pageWidth - margins.right).toFixed(2));
+                const footerY = parseFloat(yPosition.toFixed(2));
+                doc.text('Informe generado automáticamente con análisis de IA - Roadmap Luky', footerXLeft, footerY);
+                doc.text(String(new Date().getFullYear()), footerXRight, footerY, { align: 'right' });
+
+                // Save PDF
+                doc.save('roadmap-luky-informe-' + new Date().toISOString().split('T')[0] + '.pdf');
+                console.log('PDF con IA generado exitosamente');
+
+            } catch (error) {
+                console.error('Error generando PDF:', error);
+                alert('Error al generar PDF: ' + error.message);
+            }
+        }
+
+        // --- END AI PDF LOGIC ---
 
         window.onload = async function() {
             await loadDB();
